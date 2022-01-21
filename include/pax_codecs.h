@@ -29,9 +29,36 @@
 extern "C" {
 #endif //__cplusplus
 
+enum png_chunk_type;
+
+typedef enum png_chunk_type png_chunk_type_t;
+
+enum png_chunk_type {
+	PNG_CHUNK_UNKNOWN = -1,
+	// Image header, always the first chunk.
+	PNG_CHUNK_IHDR,
+	// Image color palette.
+	PNG_CHUNK_PLTE,
+	// Image data.
+	PNG_CHUNK_IDAT,
+	// End of PNG; marks the end of the PNG file.
+	PNG_CHUNK_IEND,
+	// Default background color.
+	PNG_CHUNK_BKGD,
+	// Skipping over several irrelevant chunks.
+	
+	// Contains transparency information.
+	// For paletted images, one transparency per color,
+	// For other images, one transparency per pixel.
+	PNG_CHUNK_TRNS
+};
+
 #include "pax_gfx.h"
+#include <stdio.h>
 
-
+// Decodes a PNG file into a buffer with the specified type.
+// Returns 1 on successful decode, refer to pax_last_error otherwise.
+bool pax_decode_png(pax_buf_t *buf, FILE *fd, pax_buf_type_t buf_type);
 
 #ifdef __cplusplus
 }
