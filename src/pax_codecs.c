@@ -112,6 +112,7 @@ bool pax_decode_png(pax_buf_t *framebuffer, FILE *fd, pax_buf_type_t buf_type) {
             // IHDR must be the first chunk, but it's not.
             goto ohshit_decode;
         } else if (chunk_type == PNG_CHUNK_IDAT) {
+            return true;
             // Let's do some zlib!
             // TODO: convert this to an external function which reads the file directly.
             size_t idat_len = 0;
