@@ -29,9 +29,41 @@
 extern "C" {
 #endif //__cplusplus
 
+enum png_filter_type;
+enum png_color_type;
 enum png_chunk_type;
 
+typedef enum png_filter_type png_filter_type_t;
+typedef enum png_color_type png_color_type_t;
 typedef enum png_chunk_type png_chunk_type_t;
+
+enum png_filter_type {
+	PNG_FILTER_UNKNOWN = -1,
+	// Do not filter.
+	PNG_FILTER_NONE,
+	// Pixel to the left.
+	PNG_FILTER_SUB,
+	// Pixel above.
+	PNG_FILTER_UP,
+	// Mean of up and left, rounded down.
+	PNG_FILTER_AVERAGE,
+	// left, up or up_left, whichever is closest to p=left+up-up_left
+	PNG_FILTER_PEATH
+};
+
+enum png_color_type {
+	PNG_COLOR_UNKNOWN = -1,
+	// Greyscale color.
+	PNG_COLOR_GREY    = 0x00,
+	// RGB color (truecolor).
+	PNG_COLOR_RGB     = 0x02,
+	// Palette (indexed color).
+	PNG_COLOR_PAL     = 0x03,
+	// Greyscale with alpha.
+	PNG_COLOR_GREY_A  = 0x04,
+	// ARGB (truecolor with alpha).
+	PNG_COLOR_RGBA    = 0x06,
+};
 
 enum png_chunk_type {
 	PNG_CHUNK_UNKNOWN = -1,
