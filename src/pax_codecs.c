@@ -135,7 +135,8 @@ static inline void png_decode_scanline(pax_buf_t *out, uint8_t *predict_buf, int
 	bool ignore_y = !y;
 	
 	int offset = 0;
-	for (int x = 0; x < width; x ++) {
+	int increment = (bits_per_channel < 8) ? (8 / bits_per_channel) : 1;
+	for (int x = 0; x < width; x += increment) {
 		// Make a prediction of what the value should be as per PNG spec.
 		uint8_t prediction = png_predict(predict_buf, offset, scanline_size, bytes_per_pixel, ignore_y, filter);
 		// Add the prediction to the real value.
@@ -200,9 +201,11 @@ static inline void png_decode_scanline(pax_buf_t *out, uint8_t *predict_buf, int
 					break;
 				case PNG_COLOR_RGBA:
 					// Get alpha.
-					// Implicit flow through to RGB.
 					col = pointer[3<<is_long] << 24;
+					// Explicit flow through to RGB.
+					goto le_rgb;
 				case PNG_COLOR_RGB:
+					le_rgb:
 					// Get RGB.
 					// Do this with bitwise OR so we preserve the optional alpha channel.
 					col |= (pointer[0] << 16) | (pointer[1<<is_long] << 8) | pointer[2<<is_long];
@@ -212,7 +215,8 @@ static inline void png_decode_scanline(pax_buf_t *out, uint8_t *predict_buf, int
 			}
 			
 			// And output it.
-			pax_set_pixel(out, col, x, y);
+			// ESP_LOGE(TAG, "set %08x @ %d, %d", col, x, y);
+			pax_set_pixel(out, 0xff0000ff, x, y);
 		}
 		
 		offset += bytes_per_pixel;
@@ -241,6 +245,11 @@ static inline pax_err_t png_decode_idat(pax_buf_t *out, FILE *fd, size_t chunk_l
 	// TODO: convert this to be streaming.
 	size_t idat_len = 0;
 	uint8_t *idat_buf = malloc(chunk_len);
+	if (!idat_buf) {
+		// Not enough memory.
+		free(predict_buf);
+		return PAX_ERR_NOMEM;
+	}
 	size_t read = xread(idat_buf, 1, chunk_len, fd);
 	if (read < chunk_len) {
 		// Not enough SHIT.
@@ -249,10 +258,16 @@ static inline pax_err_t png_decode_idat(pax_buf_t *out, FILE *fd, size_t chunk_l
 		return PAX_ERR_NODATA;
 	}
 	// Ask miniz very nicely to decompress for us.
-	size_t idat_cap = width * height * 4;
+	size_t idat_cap = (scanline_size + 1) * height;
 	uint8_t *idat_raw = malloc(idat_cap);
+	if (!idat_raw) {
+		// Not enough memory.
+		free(idat_buf);
+		free(predict_buf);
+		return PAX_ERR_NOMEM;
+	}
 	idat_len = tinfl_decompress_mem_to_mem(idat_raw, idat_cap, idat_buf, chunk_len, TINFL_FLAG_PARSE_ZLIB_HEADER);
-	ESP_LOGW(TAG, "decompress %zd bytes to %zd bytes", chunk_len, idat_len);
+	ESP_LOGW(TAG, "decompress %zd bytes to %zd bytes (cap %zd)", chunk_len, idat_len, idat_cap);
 	for (int i = 0; i < idat_len; i ++) {
 		if ((i & 15) != 0 && (i & 3) == 0) printf(" ");
 		if (i != 0 && (i & 15) == 0) printf("\r\n");
@@ -262,23 +277,24 @@ static inline pax_err_t png_decode_idat(pax_buf_t *out, FILE *fd, size_t chunk_l
 	
 	// Start decoding and writing.
 	for (int y = 0; y < height; y++) {
-		// Copy the old line back a bit.
-		// We can skip this on the first scanline.
-		if (y) memcpy(predict_buf, predict_buf + scanline_size, scanline_size);
-		// The filter to apply is the first byte in the line.
-		uint8_t filter = idat_buf[y * (scanline_size + 1)];
-		// The rest is the data to decode.
-		memcpy(predict_buf + scanline_size, &idat_buf[y * (scanline_size + 1) + 1], scanline_size);
-		// Decode a line.
-		png_decode_scanline(
-			out, predict_buf, y, width, 
-			bytes_per_pixel, filter,
-			color_type, bits_per_channel, palette, palette_size
-		);
+		// // Copy the old line back a bit.
+		// // We can skip this on the first scanline.
+		// if (y) memcpy(predict_buf, predict_buf + scanline_size, scanline_size);
+		// // The filter to apply is the first byte in the line.
+		// uint8_t filter = idat_buf[y * (scanline_size + 1)];
+		// // The rest is the data to decode.
+		// memcpy(predict_buf + scanline_size, &idat_buf[y * (scanline_size + 1) + 1], scanline_size);
+		// // Decode a line.
+		// png_decode_scanline(
+		// 	out, predict_buf, y, width, 
+		// 	bytes_per_pixel, filter,
+		// 	color_type, bits_per_channel, palette, palette_size
+		// );
 	}
 	
 	// We're done with our IDAT.
 	free(idat_raw);
+	free(idat_buf);
 	free(predict_buf);
 	
 	return PAX_OK;
@@ -303,9 +319,11 @@ bool pax_decode_png(pax_buf_t *framebuffer, FILE *fd, pax_buf_type_t buf_type) {
 	// The image's bit depth; the number of bits per sample or per palette index (not per pixel).
 	int      bit_depth = 0;
 	// The image's color type.
-	int      color_type = 0;
+	int      color_type = PNG_COLOR_UNKNOWN;
 	// Whether or not to use the ADAM7 interlacing method.
 	bool     use_adam7 = false;
+	
+	pax_err_t error = PAX_ERR_UNKNOWN;
 	
 	// Iterate over chunks.
 	while (true) {
@@ -356,7 +374,11 @@ bool pax_decode_png(pax_buf_t *framebuffer, FILE *fd, pax_buf_type_t buf_type) {
 		} else if (chunk_type == PNG_CHUNK_IDAT) {
 			// Decode the IDAT chunk.
 			// This is enough to justify it's own function.
-			png_decode_idat(framebuffer, fd, chunk_len, width, height, color_type, bit_depth, NULL, 0);
+			pax_err_t res = png_decode_idat(framebuffer, fd, chunk_len, width, height, color_type, bit_depth, NULL, 0);
+			if (res != PAX_OK) {
+				error = res;
+				goto ohshit;
+			}
 		} else if (chunk_type == PNG_CHUNK_IEND) {
 			// End of the image.
 			PAX_SUCCESS();
@@ -377,8 +399,6 @@ bool pax_decode_png(pax_buf_t *framebuffer, FILE *fd, pax_buf_type_t buf_type) {
 		ESP_LOGW(TAG, "CRC skip 4");
 		xseek(fd, 4, SEEK_CUR);
 	}
-	
-	pax_err_t error = PAX_ERR_UNKNOWN;
 	
 	// Jumped to if, while decoding chunks, we run out of data in fd.
 	ohshit_outofdata:
