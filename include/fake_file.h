@@ -21,7 +21,7 @@ typedef struct xfile {
 } xfile_t;
 
 // Sort-of implementation of fopen for a memory buffer.
-// You cannot use this with the read stdio.
+// You cannot use this with the real stdio.
 FILE *xopenmem(void *memory, size_t size);
 
 // Close this file.

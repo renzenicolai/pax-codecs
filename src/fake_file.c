@@ -8,7 +8,7 @@
 #include <malloc.h>
 
 // Sort-of implementation of fopen for a memory buffer.
-// You cannot use this with the read stdio.
+// You cannot use this with the real stdio.
 FILE *xopenmem(void *memory, size_t size) {
     xfile_t *file = (xfile_t *) malloc(sizeof(xfile_t));
     *file = (xfile_t) {
