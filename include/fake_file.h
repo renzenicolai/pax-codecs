@@ -30,7 +30,7 @@ void xclose(FILE *fd);
 
 // Fake implementation of fread.
 // Always reads in bytes (as if size == 1).
-size_t xread(void *restrict __ptr, size_t __size, size_t __n, FILE *restrict __stream);
+size_t xread(void *__ptr, size_t __size, size_t __n, FILE *__stream);
 
 // Fake implementation of fseek.
 int xseek(FILE *__stream, long int __off, int __whence);
