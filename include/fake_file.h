@@ -6,6 +6,10 @@
 #error "You must not include both fake_file.h and real_file.h!"
 #endif //REAL_FILE_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif //__cplusplus
+
 #include <stdint.h>
 #include <stddef.h>
 #include <stdbool.h>
@@ -37,5 +41,9 @@ int xseek(FILE *__stream, long int __off, int __whence);
 
 // Fake implementation of ftell.
 int xtell(FILE *__stream);
+
+#ifdef __cplusplus
+}
+#endif //__cplusplus
 
 #endif //FAKE_FILE_H

@@ -29,14 +29,6 @@
 extern "C" {
 #endif //__cplusplus
 
-enum png_filter_type;
-enum png_color_type;
-enum png_chunk_type;
-
-typedef enum png_filter_type png_filter_type_t;
-typedef enum png_color_type png_color_type_t;
-typedef enum png_chunk_type png_chunk_type_t;
-
 enum png_filter_type {
 	PNG_FILTER_UNKNOWN = -1,
 	// Do not filter.
@@ -84,6 +76,10 @@ enum png_chunk_type {
 	// For other images, one transparency per pixel.
 	PNG_CHUNK_TRNS
 };
+
+typedef enum png_filter_type png_filter_type_t;
+typedef enum png_color_type png_color_type_t;
+typedef enum png_chunk_type png_chunk_type_t;
 
 #include "pax_gfx.h"
 #include <stdio.h>
