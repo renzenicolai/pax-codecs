@@ -84,9 +84,15 @@ typedef enum png_chunk_type png_chunk_type_t;
 #include "pax_gfx.h"
 #include <stdio.h>
 
-// Decodes a PNG file into a buffer with the specified type.
+// Decodes a PNG file into a PAX buffer with the specified type.
 // Returns 1 on successful decode, refer to pax_last_error otherwise.
-bool pax_decode_png(pax_buf_t *buf, FILE *fd, pax_buf_type_t buf_type);
+// It is not gauranteed the type equals buf_type.
+bool pax_decode_png_fd (pax_buf_t *buf, FILE *fd, pax_buf_type_t buf_type);
+
+// Decodes a PNG buffer into a PAX buffer with the specified type.
+// Returns 1 on successful decode, refer to pax_last_error otherwise.
+// It is not gauranteed the type equals buf_type.
+bool pax_decode_png_buf(pax_buf_t *buf, void *buf, size_t buf_len, pax_buf_type_t buf_type);
 
 #ifdef __cplusplus
 }
