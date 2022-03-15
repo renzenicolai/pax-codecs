@@ -32,7 +32,7 @@ static bool png_decode_quickndirty(pax_buf_t *framebuffer, spng_ctx *ctx, pax_bu
 
 // Decodes a PNG file into a buffer with the specified type.
 // Returns 1 on successful decode, refer to pax_last_error otherwise.
-bool pax_decode_png(pax_buf_t *framebuffer, FILE *fd, pax_buf_type_t buf_type) {
+bool pax_decode_png_fd(pax_buf_t *framebuffer, FILE *fd, pax_buf_type_t buf_type) {
 	spng_ctx *ctx = spng_ctx_new(0);
 	int err = spng_set_png_file(ctx, fd);
 	if (err) {
