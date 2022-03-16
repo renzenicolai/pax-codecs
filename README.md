@@ -1,5 +1,5 @@
 # PAX codecs
-Optional image codecs for PAX graphics.
+Optional image codecs for [PAX graphics](https://github.com/robotman2412/pax-graphics).
 
 Currently supports PNG decoding.
 
