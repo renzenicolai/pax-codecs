@@ -80,12 +80,6 @@ static bool png_decode_quickndirty(pax_buf_t *framebuffer, spng_ctx *ctx, pax_bu
 	uint32_t height = ihdr.height;
 	size_t n_pixels = width * height;
 	
-	// Fuck up the RGBA into ARGB.
-	for (size_t i = 0; i < n_pixels; i++) {
-		// Do a rotate right.
-		outbuf[i] = (outbuf[i] >> 8) | (outbuf[i] << 24);
-	}
-	
 	// Finally, return a buffer.
 	pax_buf_init(framebuffer, outbuf, width, height, PAX_BUF_32_8888ARGB);
 	framebuffer->do_free = true;
