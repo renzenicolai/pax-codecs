@@ -24,96 +24,63 @@
 
 #include "pax_codecs.h"
 #include "pax_internal.h"
-#include "real_file.h"
 #include "spng.h"
 
-static bool png_decode_quickndirty(pax_buf_t *framebuffer, spng_ctx *ctx, pax_buf_type_t buf_type);
-static bool png_decode_layered(pax_buf_t *framebuffer, spng_ctx *ctx, pax_buf_type_t buf_type);
+static bool png_decode(pax_buf_t *framebuffer, spng_ctx *ctx, pax_buf_type_t buf_type, int flags);
+static bool png_decode_progressive(pax_buf_t *framebuffer, spng_ctx *ctx, struct spng_ihdr ihdr, pax_buf_type_t buf_type, int dx, int dy);
 
 // Decodes a PNG file into a buffer with the specified type.
 // Returns 1 on successful decode, refer to pax_last_error otherwise.
-bool pax_decode_png_fd(pax_buf_t *framebuffer, FILE *fd, pax_buf_type_t buf_type) {
+bool pax_decode_png_fd(pax_buf_t *framebuffer, FILE *fd, pax_buf_type_t buf_type, int flags) {
 	spng_ctx *ctx = spng_ctx_new(0);
 	int err = spng_set_png_file(ctx, fd);
 	if (err) {
 		spng_ctx_free(ctx);
 		return false;
 	}
-	return png_decode_quickndirty(framebuffer, ctx, buf_type);
+	bool ret = png_decode(framebuffer, ctx, buf_type, flags);
+	spng_ctx_free(ctx);
+	return ret;
 }
 
 // Decodes a PNG buffer into a PAX buffer with the specified type.
 // Returns 1 on successful decode, refer to pax_last_error otherwise.
-bool pax_decode_png_buf(pax_buf_t *framebuffer, void *buf, size_t buf_len, pax_buf_type_t buf_type) {
+bool pax_decode_png_buf(pax_buf_t *framebuffer, void *buf, size_t buf_len, pax_buf_type_t buf_type, int flags) {
 	spng_ctx *ctx = spng_ctx_new(0);
 	int err = spng_set_png_buffer(ctx, buf, buf_len);
 	if (err) {
 		spng_ctx_free(ctx);
 		return false;
 	}
-	return png_decode_quickndirty(framebuffer, ctx, buf_type);
+	bool ret = png_decode(framebuffer, ctx, buf_type, flags);
+	spng_ctx_free(ctx);
+	return ret;
 }
 
-// A quick'n'dirty approach to PNG decode.
-// TODO: Replace with a more memory-conservative, more versatile approach.
-static bool png_decode_quickndirty(pax_buf_t *framebuffer, spng_ctx *ctx, pax_buf_type_t buf_type) {
-	pax_col_t *outbuf = NULL;
-	framebuffer->width  = 0;
-	framebuffer->height = 0;
+// A generic wrapper for decoding PNGs.
+// Sets up the framebuffer if required.
+static bool png_decode(pax_buf_t *framebuffer, spng_ctx *ctx, pax_buf_type_t buf_type, int flags) {
+	bool do_alloc = !(flags & CODEC_FLAG_EXISTING);
+	if (do_alloc) {
+		framebuffer->width  = 0;
+		framebuffer->height = 0;
+	}
 	
-	// Try a PNG decode.
+	// Fetch the IHDR.
 	struct spng_ihdr ihdr;
 	int err = spng_get_ihdr(ctx, &ihdr);
-	if (err) goto error;
+	if (err) {
+		return false;
+	}
 	uint32_t width      = ihdr.width;
 	uint32_t height     = ihdr.height;
-	framebuffer->width  = width;
-	framebuffer->height = height;
-	size_t n_pixels     = width * height;
-	
-	enum spng_format png_fmt = SPNG_FMT_RGBA8;
-	
-	// Get image dims.
-	size_t size;
-	err = spng_decoded_image_size(ctx, png_fmt, &size);
-	if (err) goto error;
-	outbuf = malloc(size);
-	
-	// Decode it.
-	err = spng_decode_image(ctx, outbuf, size, png_fmt, 0);
-	if (err) goto error;
-	spng_ctx_free(ctx);
-	
-	// Finally, return a buffer.
-	pax_buf_init(framebuffer, outbuf, width, height, PAX_BUF_32_8888ARGB);
-	framebuffer->do_free = true;
-	
-	return true;
-	
-	error:
-	spng_ctx_free(ctx);
-	if (outbuf) free(outbuf);
-	return false;
-}
-
-// A WIP decode inator.
-static bool png_decode_layered(pax_buf_t *framebuffer, spng_ctx *ctx, pax_buf_type_t buf_type) {
-	pax_col_t *outbuf = NULL;
-	framebuffer->width  = 0;
-	framebuffer->height = 0;
-	
-	// Try a PNG decode.
-	struct spng_ihdr ihdr;
-	int err = spng_get_ihdr(ctx, &ihdr);
-	if (err) goto error;
-	uint32_t width      = ihdr.width;
-	uint32_t height     = ihdr.height;
-	framebuffer->width  = width;
-	framebuffer->height = height;
-	size_t n_pixels     = width * height;
+	if (do_alloc) {
+		framebuffer->width  = width;
+		framebuffer->height = height;
+	}
 	
 	// Select a good buffer type.
-	if (PAX_IS_PALETTE(buf_type) && ihdr.color_type != 3) {
+	if (do_alloc && PAX_IS_PALETTE(buf_type) && ihdr.color_type != 3) {
 		// This is not a palleted image, change the output type.
 		int bpp = PAX_GET_BPP(buf_type);
 		if (bpp == 1) {
@@ -153,15 +120,216 @@ static bool png_decode_layered(pax_buf_t *framebuffer, spng_ctx *ctx, pax_buf_ty
 				buf_type = PAX_BUF_8_GREY;
 			}
 		}
+		ESP_LOGW(TAG, "Changing buffer type to %08x", buf_type);
 	}
 	
-	// Set the image to decode progressive.
-	spng_decode_image(ctx, NULL, 0, SPNG_FMT_RAW, SPNG_DECODE_PROGRESSIVE);
+	// Determine whether to allocate a buffer.
+	if (do_alloc) {
+		// Allocate some funny.
+		ESP_LOGI(TAG, "Decoding PNG %dx%d to %08x", width, height, buf_type);
+		pax_buf_init(framebuffer, NULL, width, height, buf_type);
+		if (pax_last_error) return false;
+	}
 	
+	// Decd.
+	if (!png_decode_progressive(framebuffer, ctx, ihdr, buf_type, 0, 0)) {
+		goto error;
+	}
+	
+	// Success.
 	return true;
 	
 	error:
-	spng_ctx_free(ctx);
-	if (outbuf) free(outbuf);
+	if (do_alloc) {
+		// Clean up in case of erruer.
+		pax_buf_destroy(framebuffer);
+	}
+	return false;
+}
+
+// A WIP decode inator.
+static bool png_decode_progressive(pax_buf_t *framebuffer, spng_ctx *ctx, struct spng_ihdr ihdr, pax_buf_type_t buf_type, int x_offset, int y_offset) {
+	int err = 0;
+	uint8_t          *row  = NULL;
+	struct spng_plte *plte = NULL;
+	struct spng_trns *trns = NULL;
+	
+	// Get image parameters.
+	uint32_t width    = ihdr.width;
+	uint32_t height   = ihdr.height;
+	
+	// Reduce 16pbc back to 8pbc.
+	int png_fmt;
+	int channels_per_pixel;
+	uint32_t channel_mask;
+	switch (ihdr.color_type) {
+		case 0:
+			// Greyscale.
+			png_fmt = SPNG_FMT_G8;
+			channels_per_pixel = 1;
+			channel_mask = 0x000000ff;
+			break;
+		case 2:
+			// RGB.
+			png_fmt = SPNG_FMT_RGB8;
+			channels_per_pixel = 3;
+			channel_mask = 0x00ffffff;
+			break;
+		case 3:
+			// Palette.
+			png_fmt = SPNG_FMT_RAW;
+			channels_per_pixel = 1;
+			channel_mask = 0x000000ff;
+			break;
+		case 4:
+			// Greyscale and alpha.
+			png_fmt = SPNG_FMT_GA8;
+			channels_per_pixel = 2;
+			channel_mask = 0x0000ffff;
+			break;
+		case 6:
+		default:
+			// RGBA.
+			png_fmt = SPNG_FMT_RGBA8;
+			channels_per_pixel = 4;
+			channel_mask = 0xffffffff;
+			break;
+	}
+	ESP_LOGE(TAG, "PNG FMT %d", png_fmt);
+	
+	// Get the size for the fancy buffer.
+	size_t   decd_len = 0;
+	err = spng_decoded_image_size(ctx, png_fmt, &decd_len);
+	if (err) {
+		goto error;
+	}
+	size_t   row_size = decd_len / height;
+	row = malloc(row_size);
+	err = spng_decode_chunks(ctx);
+	if (err) {
+		ESP_LOGE(TAG, "Failed at spng_decode_chunks");
+	}
+	
+	// Get the palette, if any.
+	bool has_palette = ihdr.color_type == 3;
+	bool has_trns    = has_palette;
+	plte = malloc(sizeof(struct spng_plte));
+	trns = malloc(sizeof(struct spng_trns));
+	if (has_palette) {
+		// Color part of palette.
+		err = spng_get_plte(ctx, plte);
+		if (err && err != SPNG_ECHUNKAVAIL) goto error;
+		
+		// Alpha part of palette.
+		err = spng_get_trns(ctx, trns);
+		if (err == SPNG_ECHUNKAVAIL) has_trns = false;
+		else if (err) goto error;
+	}
+	
+	// Set the image to decode progressive.
+	err = spng_decode_image(ctx, NULL, 0, png_fmt, SPNG_DECODE_PROGRESSIVE);
+	if (err) {
+		ESP_LOGE(TAG, "Failed at spng_decode_image");
+		goto error;
+	}
+	
+	// Decoding time!
+	struct spng_row_info info;
+	while (1) {
+		// Get row metadata.
+		err = spng_get_row_info(ctx, &info);
+		if (err && err != SPNG_EOI) goto error;
+		
+		// Decode a row's data.
+		err = spng_decode_scanline(ctx, row, row_size);
+		if (err && err != SPNG_EOI) goto error;
+		
+		// Have it sharted out.
+		int    dx = 1;
+		size_t offset = 0;
+		int x = 0;
+		for (; x < width; x += dx) {
+			// Get the raw data.
+			uint32_t raw = channel_mask & *(uint32_t *) (row + offset);
+			offset += channels_per_pixel * dx;
+			
+			// Decode color information.
+			pax_col_t color = 0;
+			if (has_palette && PAX_IS_PALETTE(buf_type)) {
+				color = raw;
+			} else if (has_palette) {
+				if (raw >= plte->n_entries) raw = 0;
+				// Alpha palette.
+				if (has_trns && raw < trns->n_type3_entries) {
+					color = trns->type3_alpha[raw] << 24;
+				} else {
+					color = 0xff000000;
+				}
+				// Non-alpha palette.
+				struct spng_plte_entry entry = plte->entries[raw];
+				color |= (entry.red << 16) | (entry.green << 8) | entry.blue;
+			} else if (ihdr.color_type == 0) {
+				// Greyscale.
+				color = 0xff000000 | (raw * 0x010101);
+			} else if (ihdr.color_type == 2) {
+				// RGB.
+				color = 0xff000000 | raw;
+			} else if (ihdr.color_type == 4) {
+				// Greyscale and alpha.
+				color = ((raw & 0xff00) << 16) | ((raw & 0x00ff) * 0x010101);
+			} else if (ihdr.color_type == 6) {
+				// RGBA.
+				color = raw;
+			}
+			
+			// Output the pixel to the right spot.
+			pax_set_pixel(framebuffer, color, x, info.row_num);
+			// ESP_LOGW(TAG, "Plot %08x @ %d,%d", color, x, info.row_num);
+		}
+		
+		if (err == SPNG_EOI) break;
+	}
+	
+	err = spng_decode_chunks(ctx);
+	if (err) {
+		ESP_LOGE(TAG, "Failed at spng_decode_chunks");
+	}
+	
+	// Get the palette, attempt two.
+	if (has_palette) {
+		// Color part of palette.
+		err = spng_get_plte(ctx, plte);
+		if (err) {
+			ESP_LOGE(TAG, "spng_get_plte 2");
+			goto error;
+		}
+	}
+	
+	if (has_palette && PAX_IS_PALETTE(buf_type)) {
+		// Copy over the palette.
+		pax_col_t *palette = malloc(sizeof(pax_col_t) * plte->n_entries);
+		for (size_t i = 0; i < plte->n_entries; i++) {
+			if (has_trns && i < trns->n_type3_entries) {
+				palette[i] = trns->type3_alpha[i] << 24;
+			} else {
+				palette[i] = 0xff000000;
+			}
+			struct spng_plte_entry entry = plte->entries[i];
+			palette[i] |= (entry.red << 16) | (entry.green << 8) | entry.blue;
+		}
+		framebuffer->pallette = palette;
+		framebuffer->pallette_size = plte->n_entries;
+	}
+	
+	free(plte);
+	free(trns);
+	free(row);
+	return true;
+	
+	error:
+	if (row)  free(row);
+	if (plte) free(plte);
+	if (trns) free(trns);
+	ESP_LOGE(TAG, "PNG decode error %d: %s", err, spng_strerror(err));
 	return false;
 }

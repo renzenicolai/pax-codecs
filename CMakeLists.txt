@@ -1,6 +1,6 @@
 idf_component_register(
 	SRCS
-	"src/pax_codecs.c" "src/fake_file.c"
+	"src/pax_codecs.c"
 	"libspng/spng/spng.c"
 	INCLUDE_DIRS "include" "libspng/spng" "zlib"
 	REQUIRES pax-graphics esp_rom
