@@ -70,6 +70,8 @@ static bool png_decode(pax_buf_t *framebuffer, spng_ctx *ctx, pax_buf_type_t buf
 	struct spng_ihdr ihdr;
 	int err = spng_get_ihdr(ctx, &ihdr);
 	if (err) {
+		ESP_LOGE(TAG, "Failed at spng_get_ihdr");
+		ESP_LOGE(TAG, "PNG decode error %d: %s", err, spng_strerror(err));
 		return false;
 	}
 	uint32_t width      = ihdr.width;
@@ -197,19 +199,21 @@ static bool png_decode_progressive(pax_buf_t *framebuffer, spng_ctx *ctx, struct
 			channel_mask = 0xffffffff;
 			break;
 	}
-	ESP_LOGE(TAG, "PNG FMT %d", png_fmt);
+	ESP_LOGI(TAG, "PNG FMT %d", png_fmt);
 	
 	// Get the size for the fancy buffer.
 	size_t   decd_len = 0;
 	err = spng_decoded_image_size(ctx, png_fmt, &decd_len);
 	if (err) {
+		ESP_LOGE(TAG, "Failed at spng_decoded_image_size");
 		goto error;
 	}
 	size_t   row_size = decd_len / height;
 	row = malloc(row_size);
 	err = spng_decode_chunks(ctx);
 	if (err) {
-		ESP_LOGE(TAG, "Failed at spng_decode_chunks");
+		ESP_LOGE(TAG, "Failed at spng_decode_chunks (1)");
+		goto error;
 	}
 	
 	// Get the palette, if any.
@@ -296,7 +300,7 @@ static bool png_decode_progressive(pax_buf_t *framebuffer, spng_ctx *ctx, struct
 	
 	err = spng_decode_chunks(ctx);
 	if (err) {
-		ESP_LOGE(TAG, "Failed at spng_decode_chunks");
+		ESP_LOGE(TAG, "Failed at spng_decode_chunks (2)");
 	}
 	
 	// Get the palette, attempt two.
