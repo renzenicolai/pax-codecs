@@ -160,38 +160,40 @@ static bool png_decode_progressive(pax_buf_t *framebuffer, spng_ctx *ctx, struct
 	
 	// Reduce 16pbc back to 8pbc.
 	int png_fmt;
-	int channels_per_pixel;
+	int bits_per_pixel;
 	uint32_t channel_mask;
+	uint_fast8_t shift_max = 0;
 	switch (ihdr.color_type) {
 		case 0:
 			// Greyscale.
 			png_fmt = SPNG_FMT_G8;
-			channels_per_pixel = 1;
+			bits_per_pixel = 1 * 8;
 			channel_mask = 0x000000ff;
 			break;
 		case 2:
 			// RGB.
 			png_fmt = SPNG_FMT_RGB8;
-			channels_per_pixel = 3;
+			bits_per_pixel = 3 * 8;
 			channel_mask = 0x00ffffff;
 			break;
 		case 3:
 			// Palette.
 			png_fmt = SPNG_FMT_RAW;
-			channels_per_pixel = 1;
-			channel_mask = 0x000000ff;
+			bits_per_pixel = 1 * ihdr.bit_depth;
+			channel_mask = (1 << bits_per_pixel) - 1;
+			shift_max = 8 - ihdr.bit_depth;
 			break;
 		case 4:
 			// Greyscale and alpha.
 			png_fmt = SPNG_FMT_GA8;
-			channels_per_pixel = 2;
+			bits_per_pixel = 2 * 8;
 			channel_mask = 0x0000ffff;
 			break;
 		case 6:
 		default:
 			// RGBA.
 			png_fmt = SPNG_FMT_RGBA8;
-			channels_per_pixel = 4;
+			bits_per_pixel = 4 * 8;
 			channel_mask = 0xffffffff;
 			break;
 	}
@@ -250,8 +252,10 @@ static bool png_decode_progressive(pax_buf_t *framebuffer, spng_ctx *ctx, struct
 		int x = 0;
 		for (; x < width; x += dx) {
 			// Get the raw data.
-			uint32_t raw = channel_mask & *(uint32_t *) (row + offset);
-			offset += channels_per_pixel * dx;
+			size_t address = row + (offset / 8);
+			// A slightly complicated bit extraction.
+			uint32_t raw = channel_mask & (*(uint32_t *) address >> (shift_max - offset % 8));
+			offset += bits_per_pixel * dx;
 			
 			// Decode color information.
 			pax_col_t color = 0;
