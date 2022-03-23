@@ -259,6 +259,10 @@ static bool png_decode_progressive(pax_buf_t *framebuffer, spng_ctx *ctx, struct
 			size_t address = row + (offset / 8);
 			// A slightly complicated bit extraction.
 			uint32_t raw = channel_mask & (*(uint32_t *) address >> (shift_max - offset % 8));
+			// Fix endianness.
+			if (bits_per_pixel == 16) raw = (raw << 8) | (raw >> 8);
+			else if (bits_per_pixel == 24) raw = (raw << 16) | (raw >> 16);
+			else if (bits_per_pixel == 32) raw = (raw << 24) | ((raw << 8) & 0x00ff0000) | ((raw >> 8) & 0x0000ff00) | (raw >> 24);
 			offset += bits_per_pixel * dx;
 			
 			// Decode color information.
@@ -284,10 +288,10 @@ static bool png_decode_progressive(pax_buf_t *framebuffer, spng_ctx *ctx, struct
 				color = 0xff000000 | raw;
 			} else if (ihdr.color_type == 4) {
 				// Greyscale and alpha.
-				color = ((raw & 0xff00) << 16) | ((raw & 0x00ff) * 0x010101);
+				color = (raw << 24) | ((raw >> 8) * 0x00010101);
 			} else if (ihdr.color_type == 6) {
 				// RGBA.
-				color = raw;
+				color = (raw >> 8) | (raw << 24);
 			}
 			
 			// Output the pixel to the right spot.
