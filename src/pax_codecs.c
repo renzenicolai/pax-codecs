@@ -253,15 +253,15 @@ static bool png_decode_progressive(pax_buf_t *framebuffer, spng_ctx *ctx, struct
 		// Have it sharted out.
 		int    dx = 1;
 		size_t offset = 0;
-		int x = 0;
+		int    x = 0;
 		for (; x < width; x += dx) {
 			// Get the raw data.
 			size_t address = row + (offset / 8);
 			// A slightly complicated bit extraction.
-			uint32_t raw = channel_mask & (*(uint32_t *) address >> (shift_max - offset % 8));
+			uint32_t raw = channel_mask & (*(uint32_t *) address >> (shift_max - (offset % 8)));
 			// Fix endianness.
 			if (bits_per_pixel == 16) raw = (raw << 8) | (raw >> 8);
-			else if (bits_per_pixel == 24) raw = (raw << 16) | (raw >> 16);
+			else if (bits_per_pixel == 24) raw = (raw << 16) | (raw >> 16) | (raw & 0x00ff00);
 			else if (bits_per_pixel == 32) raw = (raw << 24) | ((raw << 8) & 0x00ff0000) | ((raw >> 8) & 0x0000ff00) | (raw >> 24);
 			offset += bits_per_pixel * dx;
 			
