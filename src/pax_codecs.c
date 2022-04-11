@@ -26,7 +26,7 @@
 #include "pax_internal.h"
 #include "spng.h"
 
-static bool png_decode(pax_buf_t *framebuffer, spng_ctx *ctx, pax_buf_type_t buf_type, int flags);
+static bool png_decode(pax_buf_t *framebuffer, spng_ctx *ctx, pax_buf_type_t buf_type, int flags, int x, int y);
 static bool png_decode_progressive(pax_buf_t *framebuffer, spng_ctx *ctx, struct spng_ihdr ihdr, pax_buf_type_t buf_type, int dx, int dy);
 
 // Decodes a PNG file into a buffer with the specified type.
@@ -38,7 +38,7 @@ bool pax_decode_png_fd(pax_buf_t *framebuffer, FILE *fd, pax_buf_type_t buf_type
 		spng_ctx_free(ctx);
 		return false;
 	}
-	bool ret = png_decode(framebuffer, ctx, buf_type, flags);
+	bool ret = png_decode(framebuffer, ctx, buf_type, flags, 0, 0);
 	spng_ctx_free(ctx);
 	return ret;
 }
@@ -52,14 +52,44 @@ bool pax_decode_png_buf(pax_buf_t *framebuffer, void *buf, size_t buf_len, pax_b
 		spng_ctx_free(ctx);
 		return false;
 	}
-	bool ret = png_decode(framebuffer, ctx, buf_type, flags);
+	bool ret = png_decode(framebuffer, ctx, buf_type, flags, 0, 0);
+	spng_ctx_free(ctx);
+	return ret;
+}
+
+// Decodes a PNG file into an existing PAX buffer.
+// Takes an x/y pair for offset.
+// Returns 1 on successful decode, refer to pax_last_error otherwise.
+bool pax_insert_png_fd(pax_buf_t *framebuffer, FILE *fd, int x, int y, int flags) {
+	spng_ctx *ctx = spng_ctx_new(0);
+	int err = spng_set_png_file(ctx, fd);
+	if (err) {
+		spng_ctx_free(ctx);
+		return false;
+	}
+	bool ret = png_decode(framebuffer, ctx, framebuffer->type, flags | CODEC_FLAG_EXISTING, x, y);
+	spng_ctx_free(ctx);
+	return ret;
+}
+
+// Decodes a PNG buffer into an existing PAX buffer.
+// Takes an x/y pair for offset.
+// Returns 1 on successful decode, refer to pax_last_error otherwise.
+bool pax_insert_png_buf(pax_buf_t *framebuffer, void *png, size_t png_len, int x, int y, int flags) {
+	spng_ctx *ctx = spng_ctx_new(0);
+	int err = spng_set_png_buffer(ctx, png, png_len);
+	if (err) {
+		spng_ctx_free(ctx);
+		return false;
+	}
+	bool ret = png_decode(framebuffer, ctx, framebuffer->type, flags | CODEC_FLAG_EXISTING, x, y);
 	spng_ctx_free(ctx);
 	return ret;
 }
 
 // A generic wrapper for decoding PNGs.
 // Sets up the framebuffer if required.
-static bool png_decode(pax_buf_t *framebuffer, spng_ctx *ctx, pax_buf_type_t buf_type, int flags) {
+static bool png_decode(pax_buf_t *framebuffer, spng_ctx *ctx, pax_buf_type_t buf_type, int flags, int x_offset, int y_offset) {
 	bool do_alloc = !(flags & CODEC_FLAG_EXISTING);
 	if (do_alloc) {
 		framebuffer->width  = 0;
@@ -134,7 +164,7 @@ static bool png_decode(pax_buf_t *framebuffer, spng_ctx *ctx, pax_buf_type_t buf
 	}
 	
 	// Decd.
-	if (!png_decode_progressive(framebuffer, ctx, ihdr, buf_type, 0, 0)) {
+	if (!png_decode_progressive(framebuffer, ctx, ihdr, buf_type, x_offset, y_offset)) {
 		goto error;
 	}
 	
@@ -295,7 +325,7 @@ static bool png_decode_progressive(pax_buf_t *framebuffer, spng_ctx *ctx, struct
 			}
 			
 			// Output the pixel to the right spot.
-			pax_set_pixel(framebuffer, color, x, info.row_num);
+			pax_set_pixel(framebuffer, color, x_offset + x, y_offset + info.row_num);
 			// ESP_LOGW(TAG, "Plot %08x @ %d,%d", color, x, info.row_num);
 		}
 		
