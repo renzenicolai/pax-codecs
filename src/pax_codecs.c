@@ -158,7 +158,7 @@ static bool png_decode(pax_buf_t *framebuffer, spng_ctx *ctx, pax_buf_type_t buf
 	// Determine whether to allocate a buffer.
 	if (do_alloc) {
 		// Allocate some funny.
-		ESP_LOGI(TAG, "Decoding PNG %dx%d to %08x", width, height, buf_type);
+		ESP_LOGD(TAG, "Decoding PNG %dx%d to %08x", width, height, buf_type);
 		pax_buf_init(framebuffer, NULL, width, height, buf_type);
 		if (pax_last_error) return false;
 	}
@@ -229,7 +229,7 @@ static bool png_decode_progressive(pax_buf_t *framebuffer, spng_ctx *ctx, struct
 			channel_mask = 0xffffffff;
 			break;
 	}
-	ESP_LOGI(TAG, "PNG FMT %d", png_fmt);
+	ESP_LOGD(TAG, "PNG FMT %d", png_fmt);
 	
 	// Get the size for the fancy buffer.
 	size_t   decd_len = 0;
