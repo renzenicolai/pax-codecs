@@ -26,6 +26,9 @@
 #include "pax_internal.h"
 #include "spng.h"
 
+static const uint32_t adam7_x_start[7] = { 0, 4, 0, 2, 0, 1, 0 };
+static const uint32_t adam7_x_delta[7] = { 8, 8, 4, 4, 2, 2, 1 };
+
 static bool png_decode(pax_buf_t *framebuffer, spng_ctx *ctx, pax_buf_type_t buf_type, int flags, int x, int y);
 static bool png_decode_progressive(pax_buf_t *framebuffer, spng_ctx *ctx, struct spng_ihdr ihdr, pax_buf_type_t buf_type, int dx, int dy);
 
@@ -281,9 +284,14 @@ static bool png_decode_progressive(pax_buf_t *framebuffer, spng_ctx *ctx, struct
 		if (err && err != SPNG_EOI) goto error;
 		
 		// Have it sharted out.
-		int    dx = 1;
-		size_t offset = 0;
-		int    x = 0;
+		uint32_t dx     = 1;
+		size_t   offset = 0;
+		uint32_t x      = 0;
+		if (ihdr.interlace_method) {
+			// Adam7 interlace.
+			x  = adam7_x_start[info.pass];
+			dx = adam7_x_delta[info.pass];
+		}
 		for (; x < width; x += dx) {
 			// Get the raw data.
 			size_t address = row + (offset / 8);
@@ -293,7 +301,7 @@ static bool png_decode_progressive(pax_buf_t *framebuffer, spng_ctx *ctx, struct
 			if (bits_per_pixel == 16) raw = (raw << 8) | (raw >> 8);
 			else if (bits_per_pixel == 24) raw = (raw << 16) | (raw >> 16) | (raw & 0x00ff00);
 			else if (bits_per_pixel == 32) raw = (raw << 24) | ((raw << 8) & 0x00ff0000) | ((raw >> 8) & 0x0000ff00) | (raw >> 24);
-			offset += bits_per_pixel * dx;
+			offset += bits_per_pixel;
 			
 			// Decode color information.
 			pax_col_t color = 0;
@@ -359,8 +367,9 @@ static bool png_decode_progressive(pax_buf_t *framebuffer, spng_ctx *ctx, struct
 			struct spng_plte_entry entry = plte->entries[i];
 			palette[i] |= (entry.red << 16) | (entry.green << 8) | entry.blue;
 		}
-		framebuffer->pallette = palette;
+		framebuffer->pallette      = palette;
 		framebuffer->pallette_size = plte->n_entries;
+		framebuffer->do_free_pal   = true;
 	}
 	
 	free(plte);
