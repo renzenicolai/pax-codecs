@@ -48,7 +48,7 @@ bool pax_decode_png_fd(pax_buf_t *framebuffer, FILE *fd, pax_buf_type_t buf_type
 
 // Decodes a PNG buffer into a PAX buffer with the specified type.
 // Returns 1 on successful decode, refer to pax_last_error otherwise.
-bool pax_decode_png_buf(pax_buf_t *framebuffer, void *buf, size_t buf_len, pax_buf_type_t buf_type, int flags) {
+bool pax_decode_png_buf(pax_buf_t *framebuffer, const void *buf, size_t buf_len, pax_buf_type_t buf_type, int flags) {
 	spng_ctx *ctx = spng_ctx_new(0);
 	int err = spng_set_png_buffer(ctx, buf, buf_len);
 	if (err) {
@@ -78,7 +78,7 @@ bool pax_insert_png_fd(pax_buf_t *framebuffer, FILE *fd, int x, int y, int flags
 // Decodes a PNG buffer into an existing PAX buffer.
 // Takes an x/y pair for offset.
 // Returns 1 on successful decode, refer to pax_last_error otherwise.
-bool pax_insert_png_buf(pax_buf_t *framebuffer, void *png, size_t png_len, int x, int y, int flags) {
+bool pax_insert_png_buf(pax_buf_t *framebuffer, const void *png, size_t png_len, int x, int y, int flags) {
 	spng_ctx *ctx = spng_ctx_new(0);
 	int err = spng_set_png_buffer(ctx, png, png_len);
 	if (err) {

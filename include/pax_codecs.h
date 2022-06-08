@@ -49,7 +49,7 @@ bool pax_decode_png_fd (pax_buf_t *buf, FILE *fd, pax_buf_type_t buf_type, int f
 // Decodes a PNG buffer into a PAX buffer with the specified type.
 // Returns 1 on successful decode, refer to pax_last_error otherwise.
 // It is not gauranteed the type equals buf_type.
-bool pax_decode_png_buf(pax_buf_t *buf, void *png, size_t png_len, pax_buf_type_t buf_type, int flags);
+bool pax_decode_png_buf(pax_buf_t *buf, const void *png, size_t png_len, pax_buf_type_t buf_type, int flags);
 
 // Decodes a PNG file into an existing PAX buffer.
 // Takes an x/y pair for offset.
@@ -59,7 +59,7 @@ bool pax_insert_png_fd (pax_buf_t *buf, FILE *fd, int x, int y, int flags);
 // Decodes a PNG buffer into an existing PAX buffer.
 // Takes an x/y pair for offset.
 // Returns 1 on successful decode, refer to pax_last_error otherwise.
-bool pax_insert_png_buf(pax_buf_t *buf, void *png, size_t png_len, int x, int y, int flags);
+bool pax_insert_png_buf(pax_buf_t *buf, const void *png, size_t png_len, int x, int y, int flags);
 
 #ifdef __cplusplus
 }
