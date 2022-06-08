@@ -30,7 +30,7 @@ static const uint32_t adam7_x_start[7] = { 0, 4, 0, 2, 0, 1, 0 };
 static const uint32_t adam7_x_delta[7] = { 8, 8, 4, 4, 2, 2, 1 };
 
 static bool png_decode(pax_buf_t *framebuffer, spng_ctx *ctx, pax_buf_type_t buf_type, int flags, int x, int y);
-static bool png_decode_progressive(pax_buf_t *framebuffer, spng_ctx *ctx, struct spng_ihdr ihdr, pax_buf_type_t buf_type, int dx, int dy);
+static bool png_decode_progressive(pax_buf_t *framebuffer, spng_ctx *ctx, struct spng_ihdr ihdr, pax_buf_type_t buf_type, int dx, int dy, int flags);
 
 // Decodes a PNG file into a buffer with the specified type.
 // Returns 1 on successful decode, refer to pax_last_error otherwise.
@@ -167,7 +167,7 @@ static bool png_decode(pax_buf_t *framebuffer, spng_ctx *ctx, pax_buf_type_t buf
 	}
 	
 	// Decd.
-	if (!png_decode_progressive(framebuffer, ctx, ihdr, buf_type, x_offset, y_offset)) {
+	if (!png_decode_progressive(framebuffer, ctx, ihdr, buf_type, x_offset, y_offset, flags)) {
 		goto error;
 	}
 	
@@ -183,7 +183,7 @@ static bool png_decode(pax_buf_t *framebuffer, spng_ctx *ctx, pax_buf_type_t buf
 }
 
 // A WIP decode inator.
-static bool png_decode_progressive(pax_buf_t *framebuffer, spng_ctx *ctx, struct spng_ihdr ihdr, pax_buf_type_t buf_type, int x_offset, int y_offset) {
+static bool png_decode_progressive(pax_buf_t *framebuffer, spng_ctx *ctx, struct spng_ihdr ihdr, pax_buf_type_t buf_type, int x_offset, int y_offset, int flags) {
 	int err = 0;
 	uint8_t          *row  = NULL;
 	struct spng_plte *plte = NULL;
@@ -333,8 +333,10 @@ static bool png_decode_progressive(pax_buf_t *framebuffer, spng_ctx *ctx, struct
 			}
 			
 			// Output the pixel to the right spot.
-			pax_set_pixel(framebuffer, color, x_offset + x, y_offset + info.row_num);
-			// ESP_LOGW(TAG, "Plot %08x @ %d,%d", color, x, info.row_num);
+			if (flags & CODEC_FLAG_EXISTING)
+				pax_merge_pixel(framebuffer, color, x_offset + x, y_offset + info.row_num);
+			else
+				pax_set_pixel(framebuffer, color, x_offset + x, y_offset + info.row_num);
 		}
 		
 		if (err == SPNG_EOI) break;
