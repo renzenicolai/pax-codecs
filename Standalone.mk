@@ -5,7 +5,7 @@ PAX_PATH       ?=../pax-gfx
 PAXC_BUILD_DIR ?=build
 PAXC_CCOPTIONS ?=-c -fPIC -DPAXC_STANDALONE -Iinclude -I$(PAX_PATH)/src -Ilibspng/spng -Izlib
 PAXC_LDOPTIONS ?=-shared
-PAXC_LIBS      ?=
+PAXC_LIBS      ?=-lz
 
 # Sources
 SOURCES        =src/pax_codecs.c \
