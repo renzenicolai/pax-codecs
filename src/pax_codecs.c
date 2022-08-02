@@ -103,8 +103,8 @@ static bool png_decode(pax_buf_t *framebuffer, spng_ctx *ctx, pax_buf_type_t buf
 	struct spng_ihdr ihdr;
 	int err = spng_get_ihdr(ctx, &ihdr);
 	if (err) {
-		ESP_LOGE(TAG, "Failed at spng_get_ihdr");
-		ESP_LOGE(TAG, "PNG decode error %d: %s", err, spng_strerror(err));
+		PAX_LOGE(TAG, "Failed at spng_get_ihdr");
+		PAX_LOGE(TAG, "PNG decode error %d: %s", err, spng_strerror(err));
 		return false;
 	}
 	uint32_t width      = ihdr.width;
@@ -155,13 +155,13 @@ static bool png_decode(pax_buf_t *framebuffer, spng_ctx *ctx, pax_buf_type_t buf
 				buf_type = PAX_BUF_8_GREY;
 			}
 		}
-		ESP_LOGW(TAG, "Changing buffer type to %08x", buf_type);
+		PAX_LOGW(TAG, "Changing buffer type to %08x", buf_type);
 	}
 	
 	// Determine whether to allocate a buffer.
 	if (do_alloc) {
 		// Allocate some funny.
-		ESP_LOGD(TAG, "Decoding PNG %dx%d to %08x", width, height, buf_type);
+		PAX_LOGD(TAG, "Decoding PNG %dx%d to %08x", width, height, buf_type);
 		pax_buf_init(framebuffer, NULL, width, height, buf_type);
 		if (pax_last_error) return false;
 	}
@@ -232,20 +232,20 @@ static bool png_decode_progressive(pax_buf_t *framebuffer, spng_ctx *ctx, struct
 			channel_mask = 0xffffffff;
 			break;
 	}
-	ESP_LOGD(TAG, "PNG FMT %d", png_fmt);
+	PAX_LOGD(TAG, "PNG FMT %d", png_fmt);
 	
 	// Get the size for the fancy buffer.
 	size_t   decd_len = 0;
 	err = spng_decoded_image_size(ctx, png_fmt, &decd_len);
 	if (err) {
-		ESP_LOGE(TAG, "Failed at spng_decoded_image_size");
+		PAX_LOGE(TAG, "Failed at spng_decoded_image_size");
 		goto error;
 	}
 	size_t   row_size = decd_len / height;
 	row = malloc(row_size);
 	err = spng_decode_chunks(ctx);
 	if (err) {
-		ESP_LOGE(TAG, "Failed at spng_decode_chunks (1)");
+		PAX_LOGE(TAG, "Failed at spng_decode_chunks (1)");
 		goto error;
 	}
 	
@@ -268,7 +268,7 @@ static bool png_decode_progressive(pax_buf_t *framebuffer, spng_ctx *ctx, struct
 	// Set the image to decode progressive.
 	err = spng_decode_image(ctx, NULL, 0, png_fmt, SPNG_DECODE_PROGRESSIVE);
 	if (err) {
-		ESP_LOGE(TAG, "Failed at spng_decode_image");
+		PAX_LOGE(TAG, "Failed at spng_decode_image");
 		goto error;
 	}
 	
@@ -344,7 +344,7 @@ static bool png_decode_progressive(pax_buf_t *framebuffer, spng_ctx *ctx, struct
 	
 	err = spng_decode_chunks(ctx);
 	if (err) {
-		ESP_LOGE(TAG, "Failed at spng_decode_chunks (2)");
+		PAX_LOGE(TAG, "Failed at spng_decode_chunks (2)");
 	}
 	
 	// Get the palette, attempt two.
@@ -352,7 +352,7 @@ static bool png_decode_progressive(pax_buf_t *framebuffer, spng_ctx *ctx, struct
 		// Color part of palette.
 		err = spng_get_plte(ctx, plte);
 		if (err) {
-			ESP_LOGE(TAG, "spng_get_plte 2");
+			PAX_LOGE(TAG, "spng_get_plte 2");
 			goto error;
 		}
 	}
@@ -383,6 +383,6 @@ static bool png_decode_progressive(pax_buf_t *framebuffer, spng_ctx *ctx, struct
 	if (row)  free(row);
 	if (plte) free(plte);
 	if (trns) free(trns);
-	ESP_LOGE(TAG, "PNG decode error %d: %s", err, spng_strerror(err));
+	PAX_LOGE(TAG, "PNG decode error %d: %s", err, spng_strerror(err));
 	return false;
 }
