@@ -26,6 +26,8 @@
 #include "pax_internal.h"
 #include "spng.h"
 
+static const char *TAG = "pax_codecs";
+
 static const uint32_t adam7_x_start[7] = { 0, 4, 0, 2, 0, 1, 0 };
 static const uint32_t adam7_x_delta[7] = { 8, 8, 4, 4, 2, 2, 1 };
 
