@@ -115,7 +115,7 @@ static bool png_decode(pax_buf_t *framebuffer, spng_ctx *ctx, pax_buf_type_t buf
 		framebuffer->width  = width;
 		framebuffer->height = height;
 	}
-	pax_mark_dirty2(framebuffer, x, y, width, height);
+	pax_mark_dirty2(framebuffer, x_offset, y_offset, width, height);
 	
 	// Select a good buffer type.
 	if (do_alloc && PAX_IS_PALETTE(buf_type) && ihdr.color_type != 3) {
