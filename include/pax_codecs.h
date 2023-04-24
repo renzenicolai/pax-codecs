@@ -32,6 +32,12 @@ extern "C" {
 #include "pax_gfx.h"
 #include <stdio.h>
 
+typedef struct {
+	uint32_t width, height;
+	int bit_depth;
+	int color_type;
+} pax_png_info_t;
+
 // Indicates that any buffer format is acceptable.
 // The codec will select the most optimal format available.
 #define CODEC_FLAG_OPTIMAL  0x0001
@@ -40,6 +46,16 @@ extern "C" {
 #define CODEC_FLAG_STRICT   0x0002
 #define CODEC_FLAG_EXISTING 0x0100
 
+
+// Decodes a PNG file into a PAX buffer with the specified type.
+// Returns 1 on successful decode, refer to pax_last_error otherwise.
+// It is not gauranteed the type equals buf_type.
+bool pax_info_png_fd (pax_png_info_t *info, FILE *fd);
+
+// Decodes a PNG buffer into a PAX buffer with the specified type.
+// Returns 1 on successful decode, refer to pax_last_error otherwise.
+// It is not gauranteed the type equals buf_type.
+bool pax_info_png_buf(pax_png_info_t *info, const void *png, size_t png_len);
 
 // Decodes a PNG file into a PAX buffer with the specified type.
 // Returns 1 on successful decode, refer to pax_last_error otherwise.
