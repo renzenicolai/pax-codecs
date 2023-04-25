@@ -32,6 +32,7 @@ static const uint32_t adam7_x_start[7] = { 0, 4, 0, 2, 0, 1, 0 };
 static const uint32_t adam7_x_delta[7] = { 8, 8, 4, 4, 2, 2, 1 };
 
 static bool png_info(pax_png_info_t *info, spng_ctx *ctx);
+static bool png_encode(const pax_buf_t *framebuffer, spng_ctx *ctx, int x, int y, int width, int height);
 static bool png_decode(pax_buf_t *framebuffer, spng_ctx *ctx, pax_buf_type_t buf_type, int flags, int x, int y);
 static bool png_decode_progressive(pax_buf_t *framebuffer, spng_ctx *ctx, struct spng_ihdr ihdr, pax_buf_type_t buf_type, int dx, int dy, int flags);
 
@@ -65,6 +66,48 @@ bool pax_info_png_buf(pax_png_info_t *info, const void *buf, size_t buf_len) {
 	return ret;
 }
 
+
+// Encodes a pax buffer into a PNG file.
+// Returns 1 on successful encode, refer to pax_last_error otherwise.
+bool pax_encode_png_fd(const pax_buf_t *buf, FILE *fd, int x, int y, int width, int height) {
+	spng_ctx *ctx = spng_ctx_new(SPNG_CTX_ENCODER);
+	int err = spng_set_png_file(ctx, fd);
+	if (err) {
+		PAX_LOGE(TAG, "%s", spng_strerror(err));
+		spng_ctx_free(ctx);
+		pax_last_error = PAX_ERR_ENCODE;
+		return false;
+	}
+	bool ret = png_encode(buf, ctx, x, y, width, height);
+	spng_ctx_free(ctx);
+	return ret;
+}
+
+// Encodes a pax buffer into a PNG buffer.
+// Returns 1 on successful encode, refer to pax_last_error otherwise.
+bool pax_encode_png_buf(const pax_buf_t *buf, void **outbuf, size_t *len, int x, int y, int width, int height) {
+	spng_ctx *ctx = spng_ctx_new(SPNG_CTX_ENCODER);
+    spng_set_option(ctx, SPNG_ENCODE_TO_BUFFER, 1);
+	bool ret = png_encode(buf, ctx, x, y, width, height);
+	if (!ret) {
+		spng_ctx_free(ctx);
+		pax_last_error = PAX_ERR_ENCODE;
+		return 0;
+	}
+	
+	int err;
+	*outbuf = spng_get_png_buffer(ctx, len, &err);
+	spng_ctx_free(ctx);
+	if (err) {
+		PAX_LOGE(TAG, "%s", spng_strerror(err));
+		pax_last_error = PAX_ERR_ENCODE;
+		*outbuf = NULL;
+		*len = 0;
+	}
+	return !err;
+}
+
+
 // Decodes a PNG file into a buffer with the specified type.
 // Returns 1 on successful decode, refer to pax_last_error otherwise.
 bool pax_decode_png_fd(pax_buf_t *framebuffer, FILE *fd, pax_buf_type_t buf_type, int flags) {
@@ -92,6 +135,7 @@ bool pax_decode_png_buf(pax_buf_t *framebuffer, const void *buf, size_t buf_len,
 	spng_ctx_free(ctx);
 	return ret;
 }
+
 
 // Decodes a PNG file into an existing PAX buffer.
 // Takes an x/y pair for offset.
@@ -123,6 +167,7 @@ bool pax_insert_png_buf(pax_buf_t *framebuffer, const void *png, size_t png_len,
 	return ret;
 }
 
+
 // A generic wrapper for getting PNG infos.
 static bool png_info(pax_png_info_t *info, spng_ctx *ctx) {
 	struct spng_ihdr ihdr;
@@ -137,6 +182,75 @@ static bool png_info(pax_png_info_t *info, spng_ctx *ctx) {
 	info->bit_depth = ihdr.bit_depth;
 	info->color_type = ihdr.color_type;
 	return true;
+}
+
+// A generic wrapper for encoding PNGs.
+static bool png_encode(const pax_buf_t *framebuffer, spng_ctx *ctx, int dx, int dy, int width, int height) {
+	// Clamp: horizontal.
+	if (dx < 0) {
+		dx     = 0;
+		width += dx;
+	}
+	if (dx > pax_buf_get_width(framebuffer)) {
+		// Out of bounds error.
+		pax_last_error = PAX_ERR_BOUNDS;
+		return 0;
+	}
+	if (dx + width > pax_buf_get_width(framebuffer)) {
+		width = pax_buf_get_width(framebuffer) - dx;
+	}
+	
+	// Clamp: vertical.
+	if (dy < 0) {
+		dy      = 0;
+		height += dy;
+	}
+	if (dy > pax_buf_get_height(framebuffer)) {
+		// Out of bounds error.
+		pax_last_error = PAX_ERR_BOUNDS;
+		return 0;
+	}
+	if (dy + height > pax_buf_get_height(framebuffer)) {
+		height = pax_buf_get_height(framebuffer) - dy;
+	}
+	
+	// Set image properties.
+    struct spng_ihdr ihdr = {0};
+    ihdr.width = width;
+    ihdr.height = height;
+    ihdr.color_type = SPNG_COLOR_TYPE_TRUECOLOR_ALPHA;
+    ihdr.bit_depth = 8;
+	spng_set_ihdr(ctx, &ihdr);
+	
+	// Set encoding mode.
+	int err = spng_encode_image(ctx, NULL, 0, SPNG_FMT_PNG, SPNG_ENCODE_PROGRESSIVE | SPNG_ENCODE_FINALIZE);
+	
+	// Encode a few rows.
+	size_t   rowbufcap = sizeof(uint32_t) * width;
+	uint8_t *rowbuf    = malloc(rowbufcap);
+	for (int y = 0; y < height; y++) {
+		// Grab a row of pixels.
+		for (int x = 0; x < width; x++) {
+			pax_col_t col = pax_get_pixel(framebuffer, x + dx, y + dy);
+			rowbuf[4*x+0] = col >> 16; // R
+			rowbuf[4*x+1] = col >> 8;  // G
+			rowbuf[4*x+2] = col >> 0;  // B
+			rowbuf[4*x+3] = col >> 24; // A
+		}
+		
+		// Feed it to the encoder.
+		err = spng_encode_row(ctx, rowbuf, rowbufcap);
+		if (err) break;
+	}
+	free(rowbuf);
+	
+	if (err != SPNG_EOI) {
+		PAX_LOGE(TAG, "%s", spng_strerror(err));
+		pax_last_error = PAX_ERR_ENCODE;
+		return 0;
+	}
+	
+	return 1;
 }
 
 // A generic wrapper for decoding PNGs.

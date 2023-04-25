@@ -47,21 +47,24 @@ typedef struct {
 #define CODEC_FLAG_EXISTING 0x0100
 
 
-// Decodes a PNG file into a PAX buffer with the specified type.
+// Retrieves basic PNG metadata from a file.
 // Returns 1 on successful decode, refer to pax_last_error otherwise.
-// It is not gauranteed the type equals buf_type.
 bool pax_info_png_fd (pax_png_info_t *info, FILE *fd);
-
-// Decodes a PNG buffer into a PAX buffer with the specified type.
+// Retrieves basic PNG metadata from a buffer.
 // Returns 1 on successful decode, refer to pax_last_error otherwise.
-// It is not gauranteed the type equals buf_type.
 bool pax_info_png_buf(pax_png_info_t *info, const void *png, size_t png_len);
+
+// Encodes a pax buffer into a PNG file.
+// Returns 1 on successful encode, refer to pax_last_error otherwise.
+bool pax_encode_png_fd (const pax_buf_t *buf, FILE *fd, int x, int y, int width, int height);
+// Encodes a pax buffer into a PNG buffer.
+// Returns 1 on successful encode, refer to pax_last_error otherwise.
+bool pax_encode_png_buf(const pax_buf_t *buf, void **outbuf, size_t *len, int x, int y, int width, int height);
 
 // Decodes a PNG file into a PAX buffer with the specified type.
 // Returns 1 on successful decode, refer to pax_last_error otherwise.
 // It is not gauranteed the type equals buf_type.
 bool pax_decode_png_fd (pax_buf_t *buf, FILE *fd, pax_buf_type_t buf_type, int flags);
-
 // Decodes a PNG buffer into a PAX buffer with the specified type.
 // Returns 1 on successful decode, refer to pax_last_error otherwise.
 // It is not gauranteed the type equals buf_type.
@@ -71,7 +74,6 @@ bool pax_decode_png_buf(pax_buf_t *buf, const void *png, size_t png_len, pax_buf
 // Takes an x/y pair for offset.
 // Returns 1 on successful decode, refer to pax_last_error otherwise.
 bool pax_insert_png_fd (pax_buf_t *buf, FILE *fd, int x, int y, int flags);
-
 // Decodes a PNG buffer into an existing PAX buffer.
 // Takes an x/y pair for offset.
 // Returns 1 on successful decode, refer to pax_last_error otherwise.
