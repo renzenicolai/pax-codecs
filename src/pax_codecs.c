@@ -226,8 +226,13 @@ static bool png_encode(const pax_buf_t *framebuffer, spng_ctx *ctx, int dx, int 
 	int err = spng_encode_image(ctx, NULL, 0, SPNG_FMT_PNG, SPNG_ENCODE_PROGRESSIVE | SPNG_ENCODE_FINALIZE);
 	
 	// Encode a few rows.
-	size_t   rowbufcap = sizeof(uint32_t) * width;
+	size_t   rowbufcap = sizeof(uint8_t) * 4 * width;
 	uint8_t *rowbuf    = malloc(rowbufcap);
+	if (!rowbuf) {
+		pax_last_error = PAX_ERR_NOMEM;
+		return 0;
+	}
+	
 	for (int y = 0; y < height; y++) {
 		// Grab a row of pixels.
 		for (int x = 0; x < width; x++) {
