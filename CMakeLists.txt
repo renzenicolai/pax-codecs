@@ -3,7 +3,7 @@ idf_component_register(
 	"src/pax_codecs.c"
 	"libspng/spng/spng.c"
 	INCLUDE_DIRS "include" "libspng/spng" "zlib"
-	REQUIRES pax-graphics esp_rom
+	REQUIRES pax-gfx esp_rom
 )
 
 # Build static library, do not build test executables.

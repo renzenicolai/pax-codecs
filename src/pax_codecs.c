@@ -502,7 +502,7 @@ static bool png_decode_progressive(pax_buf_t *framebuffer, spng_ctx *ctx, struct
 			}
 			
 			// Output the pixel to the right spot.
-			if (flags & CODEC_FLAG_EXISTING)
+			if (flags & CODEC_FLAG_EXISTING && !(has_palette && PAX_IS_PALETTE(buf_type)))
 				pax_merge_pixel(framebuffer, color, x_offset + x, y_offset + info.row_num);
 			else
 				pax_set_pixel(framebuffer, color, x_offset + x, y_offset + info.row_num);
