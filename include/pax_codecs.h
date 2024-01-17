@@ -45,6 +45,8 @@ typedef struct {
 // This is not a gaurantee that the exact type is used, especially for palette types.
 #define CODEC_FLAG_STRICT   0x0002
 #define CODEC_FLAG_EXISTING 0x0100
+// Don't try to fix the order of the palette.
+#define CODEC_FLAG_KEEP_PAL 0x0004
 
 
 // Retrieves basic PNG metadata from a file.

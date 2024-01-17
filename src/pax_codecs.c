@@ -25,6 +25,7 @@
 #include "pax_codecs.h"
 #include "pax_internal.h"
 #include "spng.h"
+#include <stdlib.h>
 
 static const char *TAG = "pax_codecs";
 
@@ -265,6 +266,8 @@ static bool png_decode(pax_buf_t *framebuffer, spng_ctx *ctx, pax_buf_type_t buf
 	if (do_alloc) {
 		framebuffer->width  = 0;
 		framebuffer->height = 0;
+	} else {
+		buf_type = framebuffer->type;
 	}
 	
 	// Fetch the IHDR.
@@ -324,13 +327,13 @@ static bool png_decode(pax_buf_t *framebuffer, spng_ctx *ctx, pax_buf_type_t buf
 				buf_type = PAX_BUF_8_GREY;
 			}
 		}
-		PAX_LOGW(TAG, "Changing buffer type to %08x", buf_type);
+		PAX_LOGW(TAG, "Changing buffer type to %08x", (int)buf_type);
 	}
 	
 	// Determine whether to allocate a buffer.
 	if (do_alloc) {
 		// Allocate some funny.
-		PAX_LOGD(TAG, "Decoding PNG %dx%d to %08x", width, height, buf_type);
+		PAX_LOGI(TAG, "Decoding PNG %dx%d to %08x", (int) width, (int) height, buf_type);
 		pax_buf_init(framebuffer, NULL, width, height, buf_type);
 		if (pax_last_error) return false;
 	}
@@ -351,12 +354,41 @@ static bool png_decode(pax_buf_t *framebuffer, spng_ctx *ctx, pax_buf_type_t buf
 	return false;
 }
 
+// Get the closest palette color.
+static pax_col_t closest_palette_index(pax_buf_t *buf, pax_col_t argb, bool ignore_alpha) {
+	pax_col_t closest_index = 0;
+	uint16_t  closest_err   = UINT16_MAX;
+	for (size_t y = 0; y < buf->palette_size; y++) {
+		// Extract color components.
+		uint8_t  fb_a  = buf->palette[y] >> 24;
+		uint8_t  fb_r  = buf->palette[y] >> 16;
+		uint8_t  fb_g  = buf->palette[y] >> 8;
+		uint8_t  fb_b  = buf->palette[y];
+		uint8_t  png_a = argb >> 24;
+		uint8_t  png_r = argb >> 16;
+		uint8_t  png_g = argb >> 8;
+		uint8_t  png_b = argb;
+		// Determine how close the two are.
+		uint16_t err   = abs(png_r - fb_r) + abs(png_g - fb_g) + abs(png_b - fb_b);
+		if (!ignore_alpha) {
+			err += abs(png_a - fb_a);
+		}
+		if (err < closest_err) {
+			closest_err   = err;
+			closest_index = y;
+		}
+	}
+	return closest_index;
+}
+
 // A WIP decode inator.
 static bool png_decode_progressive(pax_buf_t *framebuffer, spng_ctx *ctx, struct spng_ihdr ihdr, pax_buf_type_t buf_type, int x_offset, int y_offset, int flags) {
 	int err = 0;
 	uint8_t          *row  = NULL;
 	struct spng_plte *plte = NULL;
 	struct spng_trns *trns = NULL;
+	
+	PAX_LOGI(TAG, "Decode with flags 0x%08x", flags);
 	
 	// Get image parameters.
 	uint32_t width    = ihdr.width;
@@ -401,7 +433,7 @@ static bool png_decode_progressive(pax_buf_t *framebuffer, spng_ctx *ctx, struct
 			channel_mask = 0xffffffff;
 			break;
 	}
-	PAX_LOGD(TAG, "PNG FMT %d", png_fmt);
+	PAX_LOGI(TAG, "PNG FMT %d", png_fmt);
 	
 	// Get the size for the fancy buffer.
 	size_t   decd_len = 0;
@@ -423,7 +455,13 @@ static bool png_decode_progressive(pax_buf_t *framebuffer, spng_ctx *ctx, struct
 	bool has_trns    = has_palette;
 	plte = malloc(sizeof(struct spng_plte));
 	trns = malloc(sizeof(struct spng_trns));
+	if (!plte || !trns) {
+		PAX_LOGE(TAG, "Out of memory");
+		goto error;
+	}
 	if (has_palette) {
+		PAX_LOGI(TAG, "PNG has palette");
+		
 		// Color part of palette.
 		err = spng_get_plte(ctx, plte);
 		if (err && err != SPNG_ECHUNKAVAIL) goto error;
@@ -432,6 +470,9 @@ static bool png_decode_progressive(pax_buf_t *framebuffer, spng_ctx *ctx, struct
 		err = spng_get_trns(ctx, trns);
 		if (err == SPNG_ECHUNKAVAIL) has_trns = false;
 		else if (err) goto error;
+	}
+	if (PAX_IS_PALETTE(buf_type)) {
+		PAX_LOGI(TAG, "Buf has palette");
 	}
 	
 	// Set the image to decode progressive.
@@ -502,10 +543,14 @@ static bool png_decode_progressive(pax_buf_t *framebuffer, spng_ctx *ctx, struct
 			}
 			
 			// Output the pixel to the right spot.
-			if (flags & CODEC_FLAG_EXISTING && !(has_palette && PAX_IS_PALETTE(buf_type)))
-				pax_merge_pixel(framebuffer, color, x_offset + x, y_offset + info.row_num);
-			else
+			if (!has_palette && PAX_IS_PALETTE(buf_type)) {
+				color = closest_palette_index(framebuffer, color, true);
 				pax_set_pixel(framebuffer, color, x_offset + x, y_offset + info.row_num);
+			} else if (flags & CODEC_FLAG_EXISTING && !(has_palette && PAX_IS_PALETTE(buf_type))) {
+				pax_merge_pixel(framebuffer, color, x_offset + x, y_offset + info.row_num);
+			} else {
+				pax_set_pixel(framebuffer, color, x_offset + x, y_offset + info.row_num);
+			}
 		}
 		
 		if (err == SPNG_EOI) break;
@@ -524,23 +569,53 @@ static bool png_decode_progressive(pax_buf_t *framebuffer, spng_ctx *ctx, struct
 			PAX_LOGE(TAG, "spng_get_plte 2");
 			goto error;
 		}
+		
+		// Re-map palette written from IDAT.
+		if (PAX_IS_PALETTE(buf_type) && (flags & CODEC_FLAG_EXISTING) && !(flags & CODEC_FLAG_KEEP_PAL)) {
+			// Search for closest fitting palette.
+			uint16_t *remap = malloc(sizeof(uint16_t) * plte->n_entries);
+			PAX_LOGI(TAG, "Remapping palette");
+			if (!remap) {
+				PAX_LOGE(TAG, "Out of memory");
+				goto error;
+			}
+			for (size_t x = 0; x < plte->n_entries; x++) {
+				pax_col_t argb = (plte->entries[x].red << 16) | (plte->entries[x].green << 8) | plte->entries->blue;
+				remap[x] = closest_palette_index(framebuffer, argb, true);
+				PAX_LOGI(TAG, "%"PRId16" -> %"PRId16, x, remap[x]);
+			}
+			
+			// Go over all written pixels and change the palette index.
+			for (int y = y_offset; y < height; y++) {
+				for (int x = x_offset; x < width; x++) {
+					uint32_t raw = pax_get_pixel(framebuffer, x, y);
+					if (raw > plte->n_entries) {
+						pax_set_pixel(framebuffer, x, y, 0);
+					} else {
+						pax_set_pixel(framebuffer, x, y, remap[raw]);
+					}
+				}
+			}
+			
+			free(remap);
+		}
 	}
 	
-	if (has_palette && PAX_IS_PALETTE(buf_type)) {
+	if (has_palette && PAX_IS_PALETTE(buf_type) && !(flags & CODEC_FLAG_EXISTING)) {
 		// Copy over the palette.
 		pax_col_t *palette = malloc(sizeof(pax_col_t) * plte->n_entries);
 		for (size_t i = 0; i < plte->n_entries; i++) {
-			if (has_trns && i < trns->n_type3_entries) {
-				palette[i] = trns->type3_alpha[i] << 24;
-			} else {
+			// if (has_trns && i < trns->n_type3_entries) {
+			// 	palette[i] = trns->type3_alpha[i] << 24;
+			// } else {
 				palette[i] = 0xff000000;
-			}
+			// }
 			struct spng_plte_entry entry = plte->entries[i];
 			palette[i] |= (entry.red << 16) | (entry.green << 8) | entry.blue;
 		}
-		framebuffer->pallette      = palette;
-		framebuffer->pallette_size = plte->n_entries;
-		framebuffer->do_free_pal   = true;
+		framebuffer->palette      = palette;
+		framebuffer->palette_size = plte->n_entries;
+		framebuffer->do_free_pal  = true;
 	}
 	
 	free(plte);
