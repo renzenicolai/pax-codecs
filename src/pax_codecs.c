@@ -334,7 +334,7 @@ static bool png_decode(pax_buf_t *framebuffer, spng_ctx *ctx, pax_buf_type_t buf
 	// Determine whether to allocate a buffer.
 	if (do_alloc) {
 		// Allocate some funny.
-		PAX_LOGI(TAG, "Decoding PNG %dx%d to %08x", (int) width, (int) height, buf_type);
+		PAX_LOGD(TAG, "Decoding PNG %dx%d to %08x", (int) width, (int) height, buf_type);
 		pax_buf_init(framebuffer, NULL, width, height, buf_type);
 		if (pax_last_error) return false;
 	}
@@ -389,7 +389,7 @@ static bool png_decode_progressive(pax_buf_t *framebuffer, spng_ctx *ctx, struct
 	struct spng_plte *plte = NULL;
 	struct spng_trns *trns = NULL;
 	
-	PAX_LOGI(TAG, "Decode with flags 0x%08x", flags);
+	PAX_LOGD(TAG, "Decode with flags 0x%08x", flags);
 	
 	// Get image parameters.
 	uint32_t width    = ihdr.width;
@@ -434,7 +434,7 @@ static bool png_decode_progressive(pax_buf_t *framebuffer, spng_ctx *ctx, struct
 			channel_mask = 0xffffffff;
 			break;
 	}
-	PAX_LOGI(TAG, "PNG FMT %d", png_fmt);
+	PAX_LOGD(TAG, "PNG FMT %d", png_fmt);
 	
 	// Get the size for the fancy buffer.
 	size_t   decd_len = 0;
@@ -461,7 +461,7 @@ static bool png_decode_progressive(pax_buf_t *framebuffer, spng_ctx *ctx, struct
 		goto error;
 	}
 	if (has_palette) {
-		PAX_LOGI(TAG, "PNG has palette");
+		PAX_LOGD(TAG, "PNG has palette");
 		
 		// Color part of palette.
 		err = spng_get_plte(ctx, plte);
@@ -473,7 +473,7 @@ static bool png_decode_progressive(pax_buf_t *framebuffer, spng_ctx *ctx, struct
 		else if (err) goto error;
 	}
 	if (PAX_IS_PALETTE(buf_type)) {
-		PAX_LOGI(TAG, "Buf has palette");
+		PAX_LOGD(TAG, "Buf has palette");
 	}
 	
 	// Set the image to decode progressive.
@@ -575,7 +575,7 @@ static bool png_decode_progressive(pax_buf_t *framebuffer, spng_ctx *ctx, struct
 		if (PAX_IS_PALETTE(buf_type) && (flags & CODEC_FLAG_EXISTING) && !(flags & CODEC_FLAG_KEEP_PAL)) {
 			// Search for closest fitting palette.
 			uint16_t *remap = malloc(sizeof(uint16_t) * plte->n_entries);
-			PAX_LOGI(TAG, "Remapping palette");
+			PAX_LOGD(TAG, "Remapping palette");
 			if (!remap) {
 				PAX_LOGE(TAG, "Out of memory");
 				goto error;
@@ -583,7 +583,7 @@ static bool png_decode_progressive(pax_buf_t *framebuffer, spng_ctx *ctx, struct
 			for (size_t x = 0; x < plte->n_entries; x++) {
 				pax_col_t argb = (plte->entries[x].red << 16) | (plte->entries[x].green << 8) | plte->entries->blue;
 				remap[x] = closest_palette_index(framebuffer, argb, true);
-				PAX_LOGI(TAG, "%"PRId16" -> %"PRId16, x, remap[x]);
+				PAX_LOGD(TAG, "%"PRId16" -> %"PRId16, x, remap[x]);
 			}
 			
 			// Go over all written pixels and change the palette index.
