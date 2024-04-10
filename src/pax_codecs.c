@@ -25,6 +25,7 @@
 #include "pax_codecs.h"
 #include "pax_internal.h"
 #include "spng.h"
+#include <inttypes.h>
 #include <stdlib.h>
 
 static const char *TAG = "pax_codecs";
