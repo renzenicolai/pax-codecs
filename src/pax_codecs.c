@@ -284,8 +284,9 @@ static bool png_decode(pax_buf_t *framebuffer, spng_ctx *ctx, pax_buf_type_t buf
 	if (do_alloc) {
 		framebuffer->width  = width;
 		framebuffer->height = height;
+	} else {
+		pax_mark_dirty2(framebuffer, x_offset, y_offset, width, height);
 	}
-	pax_mark_dirty2(framebuffer, x_offset, y_offset, width, height);
 	
 	// Select a good buffer type.
 	if (do_alloc && PAX_IS_PALETTE(buf_type) && ihdr.color_type != 3) {
@@ -505,7 +506,7 @@ static bool png_decode_progressive(pax_buf_t *framebuffer, spng_ctx *ctx, struct
 		}
 		for (; x < width; x += dx) {
 			// Get the raw data.
-			size_t address = row + (offset / 8);
+			void* address = row + (offset / 8);
 			// A slightly complicated bit extraction.
 			uint32_t raw = channel_mask & (*(uint32_t *) address >> (shift_max - (offset % 8)));
 			// Fix endianness.
